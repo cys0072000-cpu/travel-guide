@@ -225,12 +225,18 @@ save();
 
 const TRIP_START = "2026-08-17";
 const TRIP_END = "2026-08-27";
+function isoLocal(d){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
 function dateRange(startISO, endISO){
   const out = [];
   let d = new Date(startISO+"T00:00:00");
   const end = new Date(endISO+"T00:00:00");
   while(d <= end){
-    out.push(d.toISOString().slice(0,10));
+    out.push(isoLocal(d));
     d.setDate(d.getDate()+1);
   }
   return out;
