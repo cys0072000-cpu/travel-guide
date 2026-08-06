@@ -293,7 +293,37 @@ const TRIP_INFO = {
 };
 
 let dayIdx = 0;
+let itinView = "overview";
+function daySummary(date){
+  const t = TRIP_INFO[date];
+  return t && t.info.length ? t.info[0].title : "확정 일정 없음";
+}
 function renderItin(){
+  if(itinView === "overview") renderItinOverview();
+  else renderItinDetail();
+}
+function renderItinOverview(){
+  const rows = DAYS.map((date,i)=>{
+    const dow = DOW[new Date(date+"T00:00:00").getDay()];
+    const warnBadge = (TRIP_INFO[date] && TRIP_INFO[date].warning) ? `<span class="cnum">⚠️</span>` : "";
+    return `
+      <div class="card" data-i="${i}" style="cursor:pointer">
+        <div class="chead">
+          <b>${date.slice(5).replace("-",".")} (${dow})</b>
+          ${warnBadge}
+        </div>
+        <div class="memoline">${esc(daySummary(date))}</div>
+      </div>`;
+  }).join("");
+  $("#itinBody").innerHTML = `
+    <div class="addhead"><span class="ttl">전체 일정</span></div>
+    ${rows}
+  `;
+  $$("#itinBody .card").forEach(el=> el.onclick = ()=>{
+    dayIdx = Number(el.dataset.i); itinView = "detail"; renderItin();
+  });
+}
+function renderItinDetail(){
   const date = DAYS[dayIdx];
   const t = TRIP_INFO[date] || {info:[]};
   const dow = DOW[new Date(date+"T00:00:00").getDay()];
@@ -305,6 +335,10 @@ function renderItin(){
   const warnHtml = t.warning ? `<div class="warnbox">⚠️ ${esc(t.warning)}</div>` : "";
   const memo = DB.dayMemos[date] || "";
   $("#itinBody").innerHTML = `
+    <div class="addhead">
+      <button class="iconbtn" id="backToOverview" title="전체 일정으로">‹</button>
+      <span class="ttl">전체 일정으로</span>
+    </div>
     <div class="dayNav">
       <button class="iconbtn" id="dayPrev" ${dayIdx===0?"disabled":""}>‹</button>
       <span class="dayTtl">${date.slice(5).replace("-",".")} (${dow})</span>
@@ -315,6 +349,7 @@ function renderItin(){
     <label class="fl">오늘의 메모</label>
     <textarea class="inp" id="dayMemo" rows="4" placeholder="오늘 뭐 할지 자유롭게 적어보세요">${esc(memo)}</textarea>
   `;
+  $("#backToOverview").onclick = ()=>{ itinView = "overview"; renderItin(); };
   $("#dayPrev").onclick = ()=>{ if(dayIdx>0){ dayIdx--; renderItin(); } };
   $("#dayNext").onclick = ()=>{ if(dayIdx<DAYS.length-1){ dayIdx++; renderItin(); } };
   $("#dayMemo").oninput = e=>{ DB.dayMemos[date] = e.target.value; save(); };
