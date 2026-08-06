@@ -223,8 +223,72 @@ function save(){
 let DB = migrate(load());
 save();
 
+const TRIP_START = "2026-08-17";
+const TRIP_END = "2026-08-27";
+function dateRange(startISO, endISO){
+  const out = [];
+  let d = new Date(startISO+"T00:00:00");
+  const end = new Date(endISO+"T00:00:00");
+  while(d <= end){
+    out.push(d.toISOString().slice(0,10));
+    d.setDate(d.getDate()+1);
+  }
+  return out;
+}
+const DAYS = dateRange(TRIP_START, TRIP_END);
+
+const TRIP_INFO = {
+  "2026-08-17": { info: [
+    {icon:"✈️", title:"KE407 인천 출발", detail:"20:05 인천국제공항(T2) 출발"}
+  ]},
+  "2026-08-18": { info: [
+    {icon:"✈️", title:"KE407 브리즈번 도착", detail:"06:45 브리즈번공항(터미널 I) 도착 (+1일)"},
+    {icon:"🏨", title:"Rhapsody Resort 체크인", detail:"14:00 · 3440 Surfers Paradise Boulevarde, Gold Coast QLD 4218"}
+  ]},
+  "2026-08-19": { info: [ {icon:"🏨", title:"Rhapsody Resort 숙박 중", detail:"골드코스트"} ]},
+  "2026-08-20": { info: [ {icon:"🏨", title:"Rhapsody Resort 숙박 중", detail:"골드코스트"} ]},
+  "2026-08-21": { info: [ {icon:"🏨", title:"Rhapsody Resort 숙박 중", detail:"골드코스트"} ]},
+  "2026-08-22": { info: [ {icon:"🏨", title:"Rhapsody Resort 숙박 중", detail:"골드코스트"} ]},
+  "2026-08-23": { info: [
+    {icon:"🏨", title:"Rhapsody Resort 체크아웃", detail:"10:00"},
+    {icon:"🏨", title:"Meriton Suites Herschel St 체크인", detail:"15:00 · 43 Herschel Street, Brisbane QLD 4000"}
+  ]},
+  "2026-08-24": { info: [ {icon:"🏨", title:"Meriton Suites Herschel St 숙박 중", detail:"브리즈번"} ]},
+  "2026-08-25": { info: [ {icon:"🏨", title:"Meriton Suites Herschel St 숙박 중", detail:"브리즈번"} ]},
+  "2026-08-26": { info: [ {icon:"🏨", title:"Meriton Suites Herschel St 숙박 중", detail:"브리즈번"} ]},
+  "2026-08-27": { info: [
+    {icon:"🏨", title:"Meriton Suites 체크아웃", detail:"10:00"},
+    {icon:"✈️", title:"KE408 브리즈번 출발", detail:"08:40 브리즈번공항(터미널 I) 출발"},
+    {icon:"✈️", title:"KE408 인천 도착", detail:"17:35 인천국제공항(T2) 도착"}
+  ], warning: "체크아웃(10:00)이 출발(08:40)보다 늦어요 — 전날 미리 짐을 싸두거나 새벽에 체크아웃하세요." }
+};
+
+let dayIdx = 0;
 function renderItin(){
-  $("#itinBody").innerHTML = '<div class="empty"><span class="bigem">📅</span><p>일정 준비 중</p></div>';
+  const date = DAYS[dayIdx];
+  const t = TRIP_INFO[date] || {info:[]};
+  const dow = DOW[new Date(date+"T00:00:00").getDay()];
+  const infoHtml = t.info.map(x=>`
+    <div class="infocard">
+      <span class="ic">${x.icon}</span>
+      <div class="body"><b>${esc(x.title)}</b><div class="detail">${esc(x.detail)}</div></div>
+    </div>`).join("");
+  const warnHtml = t.warning ? `<div class="warnbox">⚠️ ${esc(t.warning)}</div>` : "";
+  const memo = DB.dayMemos[date] || "";
+  $("#itinBody").innerHTML = `
+    <div class="dayNav">
+      <button class="iconbtn" id="dayPrev" ${dayIdx===0?"disabled":""}>‹</button>
+      <span class="dayTtl">${date.slice(5).replace("-",".")} (${dow})</span>
+      <button class="iconbtn" id="dayNext" ${dayIdx===DAYS.length-1?"disabled":""}>›</button>
+    </div>
+    ${infoHtml || `<div class="empty"><span class="bigem">📅</span><p>이 날은 확정된 일정이 없어요</p></div>`}
+    ${warnHtml}
+    <label class="fl">오늘의 메모</label>
+    <textarea class="inp" id="dayMemo" rows="4" placeholder="오늘 뭐 할지 자유롭게 적어보세요">${esc(memo)}</textarea>
+  `;
+  $("#dayPrev").onclick = ()=>{ if(dayIdx>0){ dayIdx--; renderItin(); } };
+  $("#dayNext").onclick = ()=>{ if(dayIdx<DAYS.length-1){ dayIdx++; renderItin(); } };
+  $("#dayMemo").oninput = e=>{ DB.dayMemos[date] = e.target.value; save(); };
 }
 function renderPlaces(){
   $("#placesBody").innerHTML = '<div class="empty"><span class="bigem">📍</span><p>장소 목록 준비 중</p></div>';
