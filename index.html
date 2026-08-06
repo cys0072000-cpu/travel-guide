@@ -578,7 +578,44 @@ if("serviceWorker" in navigator){
   });
 }
 
-renderItin();
+/* URL로 장소를 바로 추가하는 "퀵애드" 링크: ?add=<base64url JSON> 를 열면
+   폰에서 직접 입력할 필요 없이 자동으로 장소가 저장된다. */
+function b64urlToUtf8(b64url){
+  const b64 = b64url.replace(/-/g,"+").replace(/_/g,"/");
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, c=>c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function tryAddFromUrl(){
+  const raw = new URLSearchParams(location.search).get("add");
+  if(!raw) return 0;
+  let added = 0;
+  try{
+    const items = JSON.parse(b64urlToUtf8(raw));
+    (Array.isArray(items) ? items : [items]).forEach(p=>{
+      if(!p || !p.name) return;
+      const dup = DB.places.some(x=> x.name===p.name && (x.address||"")===(p.address||""));
+      if(dup) return;
+      DB.places.push({
+        id: uid("pl"), createdAt: Date.now(),
+        name: p.name, city: p.city || "기타", category: p.category || "etc",
+        address: p.address || "", memo: p.memo || "",
+      });
+      added++;
+    });
+    if(added) save();
+  }catch(e){ toast("추가 링크를 읽을 수 없어요"); }
+  history.replaceState(null, "", location.pathname);
+  return added;
+}
+
+const addedFromUrl = tryAddFromUrl();
+if(addedFromUrl){
+  toast(`${addedFromUrl}개 장소를 추가했어요`);
+  go("places");
+} else {
+  renderItin();
+}
 </script>
 </body>
 </html>
