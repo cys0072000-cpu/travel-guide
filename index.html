@@ -295,6 +295,20 @@ const TRIP_INFO = {
   ], warning: "체크아웃(10:00)이 출발(08:40)보다 늦어요 — 전날 미리 짐을 싸두거나 새벽에 체크아웃하세요." }
 };
 
+const SEGMENTS = {
+  "2026-08-17": "✈️ 출국",
+  "2026-08-18": "🚕 공항 → 골드코스트 이동",
+  "2026-08-19": "🏖 골드코스트",
+  "2026-08-20": "🏖 골드코스트",
+  "2026-08-21": "🏖 골드코스트",
+  "2026-08-22": "🏖 골드코스트",
+  "2026-08-23": "🚕 골드코스트 → 브리즈번 이동",
+  "2026-08-24": "🏙 브리즈번",
+  "2026-08-25": "🏙 브리즈번",
+  "2026-08-26": "🏙 브리즈번",
+  "2026-08-27": "🚕 브리즈번 → 공항 이동",
+};
+
 let dayIdx = 0;
 let itinView = "overview";
 function daySummary(date){
@@ -307,13 +321,15 @@ function renderItin(){
 }
 function renderItinOverview(){
   const rows = DAYS.map((date,i)=>{
-    const warnBadge = (TRIP_INFO[date] && TRIP_INFO[date].warning) ? `<span class="cnum">⚠️</span>` : "";
+    const hasWarn = TRIP_INFO[date] && TRIP_INFO[date].warning;
+    const seg = SEGMENTS[date];
     return `
       <div class="card" data-i="${i}" style="cursor:pointer">
         <div class="chead">
           <b>${fmtDay(date)}</b>
-          ${warnBadge}
+          <span class="cnum">${i+1}일차${hasWarn?" ⚠️":""}</span>
         </div>
+        ${seg ? `<span class="chip on" style="margin-bottom:6px;display:inline-block">${esc(seg)}</span>` : ""}
         <div class="memoline">${esc(daySummary(date))}</div>
       </div>`;
   }).join("");
