@@ -1,11 +1,16 @@
 /* 여행 가이드북 서비스 워커 — 오프라인에서도 앱이 열리게 한다.
    네트워크 우선, 실패하면 캐시. snackpt/sw.js와 동일한 전략. */
-const CACHE = "travelguide-v1.0";
+const CACHE = "travelguide-v1.1";
 
 const PRECACHE = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./icons/icon-180.png",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-32.png",
+  "./icons/icon-16.png",
 ];
 
 self.addEventListener("install", (e) => {
