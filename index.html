@@ -68,6 +68,8 @@ a{color:var(--acc);text-decoration:none}
 .chip{flex:none;padding:7px 12px;border-radius:999px;background:var(--card);
   border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--tx2)}
 .chip.on{background:var(--acc);border-color:transparent;color:#fff}
+.chip.sm{padding:4px 9px;font-size:11px}
+.strike{text-decoration:line-through}
 .chip:active{transform:scale(.95)}
 
 .dayNav{display:flex;align-items:center;justify-content:center;gap:14px;margin:2px 0 14px}
@@ -84,6 +86,7 @@ a{color:var(--acc);text-decoration:none}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
   padding:13px;margin-bottom:10px}
+.card.done{opacity:.55}
 .chead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .chead .ic{font-size:16px;flex:none}
 .chead b{font-size:14.5px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -190,7 +193,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.3";
+const APP_VERSION = "1.4";
 const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
 /* 구글맵 "브리즈번" 저장 리스트에서 가져온 장소들. 최초 1회만 시딩되고,
@@ -260,6 +263,7 @@ function load(){
 function migrate(db){
   db.version = 1;
   db.dayMemos = db.dayMemos || {};
+  db.dayPlaces = db.dayPlaces || {};
   db.places = Array.isArray(db.places) ? db.places : [];
   db.checklist = Array.isArray(db.checklist) ? db.checklist
     : DEFAULT_CHECKLIST.map(label=>({id:uid("ck"), label, checked:false}));
@@ -354,13 +358,14 @@ function renderItinOverview(){
   const rows = DAYS.map((date,i)=>{
     const hasWarn = TRIP_INFO[date] && TRIP_INFO[date].warning;
     const seg = SEGMENTS[date];
+    const dayLabel = i===0 ? "" : `${i}일차`;
     return `
       <div class="card" data-i="${i}" style="cursor:pointer">
         <div class="chead">
           <b>${fmtDay(date)}</b>
-          <span class="cnum">${i+1}일차${hasWarn?" ⚠️":""}</span>
+          <span class="cnum">${dayLabel}${hasWarn?" ⚠️":""}</span>
         </div>
-        ${seg ? `<span class="chip on" style="margin-bottom:6px;display:inline-block">${esc(seg)}</span>` : ""}
+        ${seg ? `<span class="chip sm on" style="margin-bottom:6px;display:inline-block">${esc(seg)}</span>` : ""}
         <div class="memoline">${esc(daySummary(date))}</div>
       </div>`;
   }).join("");
@@ -382,6 +387,13 @@ function renderItinDetail(){
     </div>`).join("");
   const warnHtml = t.warning ? `<div class="warnbox">⚠️ ${esc(t.warning)}</div>` : "";
   const memo = DB.dayMemos[date] || "";
+  const dayPlaces = placesForDay(date);
+  const dayPlacesHtml = dayPlaces.length ? dayPlaces.map(p=>`
+    <div class="checkrow" data-id="${p.id}">
+      <span class="ic" style="flex:none;font-size:16px">${CAT_MAP[p.category]?.ic||"📌"}</span>
+      <span class="label">${esc(p.name)}</span>
+      <button class="delx">×</button>
+    </div>`).join("") : `<div class="empty" style="padding:20px 0"><p>아직 담은 장소가 없어요</p></div>`;
   $("#itinBody").innerHTML = `
     <div class="addhead">
       <button class="iconbtn" id="backToOverview" title="전체 일정으로">‹</button>
@@ -394,6 +406,11 @@ function renderItinDetail(){
     </div>
     ${infoHtml || `<div class="empty"><span class="bigem">📅</span><p>이 날은 확정된 일정이 없어요</p></div>`}
     ${warnHtml}
+    <div class="addhead" style="margin-top:18px">
+      <span class="ttl">오늘 할 일</span>
+      <button class="iconbtn" id="addDayPlaceBtn" title="장소에서 담기" style="margin-left:auto">➕</button>
+    </div>
+    <div id="dayPlaceList">${dayPlacesHtml}</div>
     <label class="fl">오늘의 메모</label>
     <textarea class="inp" id="dayMemo" rows="4" placeholder="오늘 뭐 할지 자유롭게 적어보세요">${esc(memo)}</textarea>
   `;
@@ -401,6 +418,43 @@ function renderItinDetail(){
   $("#dayPrev").onclick = ()=>{ if(dayIdx>0){ dayIdx--; renderItin(); } };
   $("#dayNext").onclick = ()=>{ if(dayIdx<DAYS.length-1){ dayIdx++; renderItin(); } };
   $("#dayMemo").oninput = e=>{ DB.dayMemos[date] = e.target.value; save(); };
+  $("#addDayPlaceBtn").onclick = ()=> openDayPlacePicker(date);
+  $$("#dayPlaceList .checkrow").forEach(row=>
+    row.querySelector(".delx").onclick = ()=> toggleDayPlace(date, row.dataset.id)
+  );
+}
+function placesForDay(date){
+  return ((DB.dayPlaces && DB.dayPlaces[date]) || []).map(id=> DB.places.find(p=>p.id===id)).filter(Boolean);
+}
+function toggleDayPlace(date, id){
+  DB.dayPlaces[date] = DB.dayPlaces[date] || [];
+  const idx = DB.dayPlaces[date].indexOf(id);
+  if(idx>=0) DB.dayPlaces[date].splice(idx,1);
+  else DB.dayPlaces[date].push(id);
+  save();
+  renderItinDetail();
+}
+function openDayPlacePicker(date){
+  const assigned = new Set(DB.dayPlaces[date] || []);
+  const rows = DB.places.length ? DB.places.map(p=>`
+    <div class="checkrow" data-id="${p.id}" style="cursor:pointer">
+      <button class="checkbox ${assigned.has(p.id)?"on":""}">${assigned.has(p.id)?"✓":""}</button>
+      <span class="label">${CAT_MAP[p.category]?.ic||"📌"} ${esc(p.name)}</span>
+    </div>`).join("") : `<div class="empty"><span class="bigem">📍</span><p>먼저 장소 탭에서 장소를 추가해보세요</p></div>`;
+  $("#sheetHost").innerHTML = `
+    <div class="sheet">
+      <div class="sheetbar">
+        <button class="iconbtn" id="sheetClose">✕</button>
+        <span class="ttl">장소에서 담기</span>
+      </div>
+      <div class="sheetbody">${rows}</div>
+    </div>
+  `;
+  $("#sheetClose").onclick = closeSheet;
+  $$("#sheetHost .checkrow").forEach(row=> row.onclick = ()=>{
+    toggleDayPlace(date, row.dataset.id);
+    openDayPlacePicker(date);
+  });
 }
 const CATEGORIES = [
   {k:"food",  n:"맛집/카페", ic:"🍜"},
@@ -419,6 +473,11 @@ function buildMapsUrl(p){
 
 let placeCat = "all", placeCity = "all";
 
+function assignedPlaceIds(){
+  const s = new Set();
+  Object.values(DB.dayPlaces||{}).forEach(arr=> (arr||[]).forEach(id=>s.add(id)));
+  return s;
+}
 function renderPlaces(){
   const catChips = [{k:"all",n:"전체",ic:"✨"}, ...CATEGORIES].map(c=>
     `<button class="chip ${placeCat===c.k?"on":""}" data-cat="${c.k}">${c.ic} ${c.n}</button>`
@@ -429,20 +488,23 @@ function renderPlaces(){
   const list = DB.places.filter(p=>
     (placeCat==="all"||p.category===placeCat) && (placeCity==="all"||p.city===placeCity)
   );
-  const cardsHtml = list.length ? list.map(p=>`
-    <div class="card" data-id="${p.id}">
+  const assigned = assignedPlaceIds();
+  const cardsHtml = list.length ? list.map(p=>{
+    const done = assigned.has(p.id);
+    return `
+    <div class="card${done?" done":""}" data-id="${p.id}">
       <div class="chead">
         <span class="ic">${CAT_MAP[p.category]?.ic || "📌"}</span>
-        <b>${esc(p.name)}</b>
-        <span class="cnum">${esc(p.city)}</span>
+        <b class="${done?"strike":""}">${esc(p.name)}</b>
+        <span class="cnum">${done?"✓ 담음 · ":""}${esc(p.city)}</span>
       </div>
       ${p.memo ? `<div class="memoline">${esc(p.memo)}</div>` : ""}
       <div class="btnrow" style="margin-top:9px">
         <a class="btn sm" href="${buildMapsUrl(p)}" target="_blank" rel="noopener">🗺 구글맵에서 보기</a>
         <button class="btn sm ghost editBtn">✏️ 수정</button>
       </div>
-    </div>
-  `).join("") : `<div class="empty"><span class="bigem">📍</span><p>아직 저장한 장소가 없어요</p><p>오른쪽 위 ＋ 버튼으로 추가해보세요</p></div>`;
+    </div>`;
+  }).join("") : `<div class="empty"><span class="bigem">📍</span><p>아직 저장한 장소가 없어요</p><p>오른쪽 위 ＋ 버튼으로 추가해보세요</p></div>`;
 
   $("#placesBody").innerHTML = `
     <div class="addhead">
@@ -625,6 +687,8 @@ function renderSettings(){
 
 const VIEWS = { itin: renderItin, places: renderPlaces, check: renderCheck, set: renderSettings };
 function go(v){
+  const already = $(".tab.on") && $(".tab.on").dataset.v === v;
+  if(already && v==="itin") itinView = "overview";
   $$(".view").forEach(el=> el.classList.add("hidden"));
   $("#v-"+v).classList.remove("hidden");
   $$(".tab").forEach(t=> t.classList.toggle("on", t.dataset.v===v));
@@ -638,6 +702,26 @@ function applyTheme(t){
   localStorage.setItem(THEME_KEY, t);
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+
+/* 왼쪽 가장자리에서 오른쪽으로 스와이프하면 뒤로가기(시트 닫기 또는 일정 상세→전체 일정) */
+function goBack(){
+  if($("#sheetHost").firstElementChild){ closeSheet(); return; }
+  if(itinView==="detail" && !$("#v-itin").classList.contains("hidden")){ itinView="overview"; renderItin(); }
+}
+(function initSwipeBack(){
+  let sx=0, sy=0, tracking=false;
+  document.addEventListener("touchstart", e=>{
+    if(e.touches.length!==1) return;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+    tracking = sx < 60;
+  }, {passive:true});
+  document.addEventListener("touchend", e=>{
+    if(!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    if(t.clientX - sx > 70 && Math.abs(t.clientY - sy) < 50) goBack();
+  }, {passive:true});
+})();
 
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
