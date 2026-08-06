@@ -56,6 +56,8 @@ a{color:var(--acc);text-decoration:none}
 
 .view{padding:4px 16px 24px;animation:fade .2s ease}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes slideback{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+.slideback{animation:slideback .24s cubic-bezier(.2,.8,.2,1)}
 .hidden{display:none !important}
 
 .iconbtn{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
@@ -193,7 +195,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.4";
+const APP_VERSION = "1.5";
 const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
 /* 구글맵 "브리즈번" 저장 리스트에서 가져온 장소들. 최초 1회만 시딩되고,
@@ -414,7 +416,7 @@ function renderItinDetail(){
     <label class="fl">오늘의 메모</label>
     <textarea class="inp" id="dayMemo" rows="4" placeholder="오늘 뭐 할지 자유롭게 적어보세요">${esc(memo)}</textarea>
   `;
-  $("#backToOverview").onclick = ()=>{ itinView = "overview"; renderItin(); };
+  $("#backToOverview").onclick = backToItinOverview;
   $("#dayPrev").onclick = ()=>{ if(dayIdx>0){ dayIdx--; renderItin(); } };
   $("#dayNext").onclick = ()=>{ if(dayIdx<DAYS.length-1){ dayIdx++; renderItin(); } };
   $("#dayMemo").oninput = e=>{ DB.dayMemos[date] = e.target.value; save(); };
@@ -497,19 +499,15 @@ function renderPlaces(){
         <span class="ic">${CAT_MAP[p.category]?.ic || "📌"}</span>
         <b class="${done?"strike":""}">${esc(p.name)}</b>
         <span class="cnum">${done?"✓ 담음 · ":""}${esc(p.city)}</span>
+        <a class="iconbtn" style="flex:none" href="${buildMapsUrl(p)}" target="_blank" rel="noopener" title="구글맵에서 보기">🗺</a>
       </div>
       ${p.memo ? `<div class="memoline">${esc(p.memo)}</div>` : ""}
-      <div class="btnrow" style="margin-top:9px">
-        <a class="btn sm" href="${buildMapsUrl(p)}" target="_blank" rel="noopener">🗺 구글맵에서 보기</a>
-        <button class="btn sm ghost editBtn">✏️ 수정</button>
-      </div>
     </div>`;
-  }).join("") : `<div class="empty"><span class="bigem">📍</span><p>아직 저장한 장소가 없어요</p><p>오른쪽 위 ＋ 버튼으로 추가해보세요</p></div>`;
+  }).join("") : `<div class="empty"><span class="bigem">📍</span><p>아직 저장한 장소가 없어요</p></div>`;
 
   $("#placesBody").innerHTML = `
     <div class="addhead">
       <span class="ttl">장소</span>
-      <button class="iconbtn" id="addPlaceBtn" title="추가" style="margin-left:auto">➕</button>
     </div>
     <div class="chiprow">${catChips}</div>
     <div class="chiprow">${cityChips}</div>
@@ -517,68 +515,8 @@ function renderPlaces(){
   `;
   $$("#placesBody [data-cat]").forEach(b=> b.onclick = ()=>{ placeCat=b.dataset.cat; renderPlaces(); });
   $$("#placesBody [data-city]").forEach(b=> b.onclick = ()=>{ placeCity=b.dataset.city; renderPlaces(); });
-  $("#addPlaceBtn").onclick = ()=> openPlaceSheet(null);
-  $$("#placesBody .card").forEach(el=> el.querySelector(".editBtn").onclick = ()=> openPlaceSheet(el.dataset.id));
 }
 
-function openPlaceSheet(id){
-  const editing = DB.places.find(p=>p.id===id) || null;
-  $("#sheetHost").innerHTML = `
-    <div class="sheet">
-      <div class="sheetbar">
-        <button class="iconbtn" id="sheetClose">✕</button>
-        <span class="ttl">${editing?"장소 수정":"장소 추가"}</span>
-      </div>
-      <div class="sheetbody">
-        <label class="fl">이름</label>
-        <input class="inp" id="pfName" value="${editing?esc(editing.name):""}" placeholder="예: Kim's Kitchen">
-        <label class="fl">도시</label>
-        <select class="inp" id="pfCity">
-          ${CITIES.map(c=>`<option value="${c}" ${editing&&editing.city===c?"selected":""}>${c}</option>`).join("")}
-        </select>
-        <label class="fl">카테고리</label>
-        <select class="inp" id="pfCat">
-          ${CATEGORIES.map(c=>`<option value="${c.k}" ${editing&&editing.category===c.k?"selected":""}>${c.ic} ${c.n}</option>`).join("")}
-        </select>
-        <label class="fl">주소 (선택, 구글맵 검색 정확도용)</label>
-        <input class="inp" id="pfAddr" value="${editing?esc(editing.address||""):""}" placeholder="예: Surfers Paradise Blvd">
-        <label class="fl">메모</label>
-        <textarea class="inp" id="pfMemo" rows="3" placeholder="추천 메뉴, 팁 등">${editing?esc(editing.memo||""):""}</textarea>
-        <div class="btnrow" style="margin-top:16px">
-          <button class="btn primary full" id="pfSave">저장</button>
-        </div>
-        ${editing?'<button class="btn danger full" id="pfDel" style="margin-top:8px">삭제</button>':""}
-      </div>
-    </div>
-  `;
-  $("#sheetClose").onclick = closeSheet;
-  $("#pfSave").onclick = ()=>{
-    const name = $("#pfName").value.trim();
-    if(!name){ toast("이름을 입력해주세요"); return; }
-    const data = {
-      name,
-      city: $("#pfCity").value,
-      category: $("#pfCat").value,
-      address: $("#pfAddr").value.trim(),
-      memo: $("#pfMemo").value.trim(),
-    };
-    if(editing){
-      Object.assign(editing, data);
-    } else {
-      DB.places.push({ id: uid("pl"), createdAt: Date.now(), ...data });
-    }
-    save(); closeSheet(); renderPlaces();
-    toast(editing?"수정했어요":"저장했어요");
-  };
-  if(editing){
-    $("#pfDel").onclick = ()=>{
-      if(!confirm("이 장소를 삭제할까요?")) return;
-      DB.places = DB.places.filter(p=>p.id!==editing.id);
-      save(); closeSheet(); renderPlaces();
-      toast("삭제했어요");
-    };
-  }
-}
 function closeSheet(){ $("#sheetHost").innerHTML = ""; }
 
 function renderCheck(){
@@ -704,9 +642,20 @@ function applyTheme(t){
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
 
 /* 왼쪽 가장자리에서 오른쪽으로 스와이프하면 뒤로가기(시트 닫기 또는 일정 상세→전체 일정) */
+function playSlideBack(){
+  const el = $("#itinBody");
+  el.classList.remove("slideback");
+  void el.offsetWidth; /* 리플로우를 강제해서 애니메이션을 다시 재생시킨다 */
+  el.classList.add("slideback");
+}
+function backToItinOverview(){
+  itinView = "overview";
+  renderItin();
+  playSlideBack();
+}
 function goBack(){
   if($("#sheetHost").firstElementChild){ closeSheet(); return; }
-  if(itinView==="detail" && !$("#v-itin").classList.contains("hidden")){ itinView="overview"; renderItin(); }
+  if(itinView==="detail" && !$("#v-itin").classList.contains("hidden")) backToItinOverview();
 }
 (function initSwipeBack(){
   let sx=0, sy=0, tracking=false;
