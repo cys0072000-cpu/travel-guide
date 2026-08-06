@@ -65,7 +65,8 @@ a{color:var(--acc);text-decoration:none}
 .iconbtn:active{transform:scale(.94)}
 .iconbtn:disabled{opacity:.35}
 
-.chiprow{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+.chiprow{display:flex;gap:7px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none;
+  mask-image:linear-gradient(90deg,#000 92%,transparent);-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent)}
 .chiprow::-webkit-scrollbar{display:none}
 .chip{flex:none;padding:7px 12px;border-radius:999px;background:var(--card);
   border:1px solid var(--line);font-size:13px;font-weight:700;color:var(--tx2)}
@@ -149,6 +150,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 
 .tabbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;max-width:560px;margin:0 auto;
   padding:7px 8px calc(7px + var(--safe-b));
+  background:var(--bg);
   background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);
   border-top:1px solid var(--line)}
@@ -195,7 +197,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
 /* 구글맵 "브리즈번" 저장 리스트에서 가져온 장소들. 최초 1회만 시딩되고,
@@ -346,6 +348,18 @@ const SEGMENTS = {
   "2026-08-27": "🚕 브리즈번 → 공항 이동",
 };
 
+/* 날짜별 이동 경로 옵션 (예시: 8/18 브리즈번공항 → 랩소디 리조트) */
+const TRANSIT_INFO = {
+  "2026-08-18": {
+    title: "브리즈번공항 → 랩소디 리조트",
+    options: [
+      {icon:"🚕", label:"택시·우버", detail:"~1시간 · $190~250 AUD · 짐 많으면 추천"},
+      {icon:"🚆", label:"에어트레인 + G:링크 트램", detail:"~55분 · $40 AUD · 가성비 좋음"},
+      {icon:"🚌", label:"콘엑시온 셔틀", detail:"2~3시간+ · $42 AUD · 정차 많아 비추천"},
+    ],
+  },
+};
+
 let dayIdx = 0;
 let itinView = "overview";
 function daySummary(date){
@@ -388,6 +402,15 @@ function renderItinDetail(){
       <div class="body"><b>${esc(x.title)}</b><div class="detail">${esc(x.detail)}</div></div>
     </div>`).join("");
   const warnHtml = t.warning ? `<div class="warnbox">⚠️ ${esc(t.warning)}</div>` : "";
+  const transit = TRANSIT_INFO[date];
+  const transitHtml = transit ? `
+    <div class="addhead" style="margin-top:18px"><span class="ttl">🧭 이동 경로 — ${esc(transit.title)}</span></div>
+    ${transit.options.map(o=>`
+      <div class="infocard">
+        <span class="ic">${o.icon}</span>
+        <div class="body"><b>${esc(o.label)}</b><div class="detail">${esc(o.detail)}</div></div>
+      </div>`).join("")}
+  ` : "";
   const memo = DB.dayMemos[date] || "";
   const dayPlaces = placesForDay(date);
   const dayPlacesHtml = dayPlaces.length ? dayPlaces.map(p=>`
@@ -408,6 +431,7 @@ function renderItinDetail(){
     </div>
     ${infoHtml || `<div class="empty"><span class="bigem">📅</span><p>이 날은 확정된 일정이 없어요</p></div>`}
     ${warnHtml}
+    ${transitHtml}
     <div class="addhead" style="margin-top:18px">
       <span class="ttl">오늘 할 일</span>
       <button class="iconbtn" id="addDayPlaceBtn" title="장소에서 담기" style="margin-left:auto">➕</button>
@@ -474,6 +498,8 @@ function buildMapsUrl(p){
 }
 
 let placeCat = "all", placeCity = "all";
+let placeView = "list";
+let placeDetailId = null;
 
 function assignedPlaceIds(){
   const s = new Set();
@@ -481,6 +507,10 @@ function assignedPlaceIds(){
   return s;
 }
 function renderPlaces(){
+  if(placeView === "detail") renderPlaceDetail();
+  else renderPlaceList();
+}
+function renderPlaceList(){
   const catChips = [{k:"all",n:"전체",ic:"✨"}, ...CATEGORIES].map(c=>
     `<button class="chip ${placeCat===c.k?"on":""}" data-cat="${c.k}">${c.ic} ${c.n}</button>`
   ).join("");
@@ -494,12 +524,12 @@ function renderPlaces(){
   const cardsHtml = list.length ? list.map(p=>{
     const done = assigned.has(p.id);
     return `
-    <div class="card${done?" done":""}" data-id="${p.id}">
+    <div class="card${done?" done":""}" data-id="${p.id}" style="cursor:pointer">
       <div class="chead">
         <span class="ic">${CAT_MAP[p.category]?.ic || "📌"}</span>
         <b class="${done?"strike":""}">${esc(p.name)}</b>
         <span class="cnum">${done?"✓ 담음 · ":""}${esc(p.city)}</span>
-        <a class="iconbtn" style="flex:none" href="${buildMapsUrl(p)}" target="_blank" rel="noopener" title="구글맵에서 보기">🗺</a>
+        <a class="iconbtn" style="flex:none" href="${buildMapsUrl(p)}" target="_blank" rel="noopener" title="구글맵에서 보기" onclick="event.stopPropagation()">📍</a>
       </div>
       ${p.memo ? `<div class="memoline">${esc(p.memo)}</div>` : ""}
     </div>`;
@@ -515,6 +545,37 @@ function renderPlaces(){
   `;
   $$("#placesBody [data-cat]").forEach(b=> b.onclick = ()=>{ placeCat=b.dataset.cat; renderPlaces(); });
   $$("#placesBody [data-city]").forEach(b=> b.onclick = ()=>{ placeCity=b.dataset.city; renderPlaces(); });
+  $$("#placesBody .card").forEach(el=> el.onclick = ()=>{
+    placeDetailId = el.dataset.id; placeView = "detail"; renderPlaces(); playSlideBack($("#placesBody"));
+  });
+}
+function renderPlaceDetail(){
+  const p = DB.places.find(x=>x.id===placeDetailId);
+  if(!p){ placeView="list"; renderPlaceList(); return; }
+  const days = Object.keys(DB.dayPlaces||{}).filter(d=> (DB.dayPlaces[d]||[]).includes(p.id)).sort();
+  $("#placesBody").innerHTML = `
+    <div class="addhead">
+      <button class="iconbtn" id="backToPlaceList" title="장소 목록으로">‹</button>
+      <span class="ttl">장소 목록으로</span>
+    </div>
+    <div class="card">
+      <div class="chead">
+        <span class="ic" style="font-size:22px">${CAT_MAP[p.category]?.ic||"📌"}</span>
+        <b style="font-size:17px">${esc(p.name)}</b>
+      </div>
+      <div class="memoline">${esc(p.city)} · ${CAT_MAP[p.category]?.n||"기타"}</div>
+      ${p.address ? `<div class="memoline" style="margin-top:8px">🏠 ${esc(p.address)}</div>` : ""}
+      ${p.memo ? `<div class="memoline" style="margin-top:8px">${esc(p.memo)}</div>` : ""}
+      ${days.length ? `<div class="memoline" style="margin-top:8px">📅 ${days.map(d=>d.slice(5).replace("-",".")).join(", ")} 일정에 담김</div>` : ""}
+      <a class="btn primary full" style="margin-top:16px" href="${buildMapsUrl(p)}" target="_blank" rel="noopener">📍 구글맵에서 보기</a>
+    </div>
+  `;
+  $("#backToPlaceList").onclick = backToPlaceList;
+}
+function backToPlaceList(){
+  placeView = "list";
+  renderPlaces();
+  playSlideBack($("#placesBody"));
 }
 
 function closeSheet(){ $("#sheetHost").innerHTML = ""; }
@@ -627,6 +688,7 @@ const VIEWS = { itin: renderItin, places: renderPlaces, check: renderCheck, set:
 function go(v){
   const already = $(".tab.on") && $(".tab.on").dataset.v === v;
   if(already && v==="itin") itinView = "overview";
+  if(already && v==="places"){ placeView = "list"; placeDetailId = null; }
   $$(".view").forEach(el=> el.classList.add("hidden"));
   $("#v-"+v).classList.remove("hidden");
   $$(".tab").forEach(t=> t.classList.toggle("on", t.dataset.v===v));
@@ -641,9 +703,9 @@ function applyTheme(t){
 }
 applyTheme(localStorage.getItem(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
 
-/* 왼쪽 가장자리에서 오른쪽으로 스와이프하면 뒤로가기(시트 닫기 또는 일정 상세→전체 일정) */
-function playSlideBack(){
-  const el = $("#itinBody");
+/* 왼쪽 가장자리에서 오른쪽으로 스와이프하면 뒤로가기(시트 닫기, 일정 상세→전체 일정, 장소 상세→목록) */
+function playSlideBack(el){
+  el = el || $("#itinBody");
   el.classList.remove("slideback");
   void el.offsetWidth; /* 리플로우를 강제해서 애니메이션을 다시 재생시킨다 */
   el.classList.add("slideback");
@@ -651,11 +713,12 @@ function playSlideBack(){
 function backToItinOverview(){
   itinView = "overview";
   renderItin();
-  playSlideBack();
+  playSlideBack($("#itinBody"));
 }
 function goBack(){
   if($("#sheetHost").firstElementChild){ closeSheet(); return; }
-  if(itinView==="detail" && !$("#v-itin").classList.contains("hidden")) backToItinOverview();
+  if(itinView==="detail" && !$("#v-itin").classList.contains("hidden")){ backToItinOverview(); return; }
+  if(placeView==="detail" && !$("#v-places").classList.contains("hidden")){ backToPlaceList(); return; }
 }
 (function initSwipeBack(){
   let sx=0, sy=0, tracking=false;
