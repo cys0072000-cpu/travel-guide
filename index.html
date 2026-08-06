@@ -414,7 +414,44 @@ function openPlaceSheet(id){
 function closeSheet(){ $("#sheetHost").innerHTML = ""; }
 
 function renderCheck(){
-  $("#checkBody").innerHTML = '<div class="empty"><span class="bigem">🎒</span><p>체크리스트 준비 중</p></div>';
+  const rows = DB.checklist.map(it=>`
+    <div class="checkrow" data-id="${it.id}">
+      <button class="checkbox ${it.checked?"on":""}">${it.checked?"✓":""}</button>
+      <span class="label ${it.checked?"done":""}">${esc(it.label)}</span>
+      <button class="delx">×</button>
+    </div>
+  `).join("");
+  $("#checkBody").innerHTML = `
+    <div class="addtip">
+      <input id="ckNew" placeholder="새 준비물 입력 후 Enter">
+      <button id="ckAddBtn">추가</button>
+    </div>
+    ${rows || `<div class="empty"><span class="bigem">🎒</span><p>준비물이 없어요</p></div>`}
+  `;
+  $$("#checkBody .checkrow").forEach(row=>{
+    const id = row.dataset.id;
+    row.querySelector(".checkbox").onclick = ()=> toggleCheck(id);
+    row.querySelector(".delx").onclick = ()=> delCheckItem(id);
+  });
+  const addFn = ()=>{
+    const v = $("#ckNew").value.trim();
+    if(!v) return;
+    addCheckItem(v);
+    $("#ckNew").value = "";
+  };
+  $("#ckAddBtn").onclick = addFn;
+  $("#ckNew").onkeydown = e=>{ if(e.key==="Enter") addFn(); };
+}
+function toggleCheck(id){
+  const it = DB.checklist.find(x=>x.id===id);
+  if(!it) return;
+  it.checked = !it.checked; save(); renderCheck();
+}
+function addCheckItem(label){
+  DB.checklist.push({id:uid("ck"), label, checked:false}); save(); renderCheck();
+}
+function delCheckItem(id){
+  DB.checklist = DB.checklist.filter(x=>x.id!==id); save(); renderCheck();
 }
 
 function go(v){
