@@ -174,12 +174,14 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
   <div class="view" id="v-itin"><div id="itinBody"></div></div>
   <div class="view hidden" id="v-places"><div id="placesBody"></div></div>
   <div class="view hidden" id="v-check"><div id="checkBody"></div></div>
+  <div class="view hidden" id="v-set"><div id="setBody"></div></div>
 </div>
 
 <div class="tabbar">
   <button class="tab on" data-v="itin"><span class="ic">📅</span>일정</button>
   <button class="tab" data-v="places"><span class="ic">📍</span>장소</button>
   <button class="tab" data-v="check"><span class="ic">🎒</span>체크리스트</button>
+  <button class="tab" data-v="set"><span class="ic">⚙️</span>설정</button>
 </div>
 
 <div id="sheetHost"></div>
@@ -188,8 +190,8 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.0";
-const APP_BUILT = "2026-08-06";
+const APP_VERSION = "1.2";
+const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -211,6 +213,7 @@ function mergeImport(inc){
   return added;
 }
 const DOW = ["일","월","화","수","목","금","토"];
+const fmtDay = date => `${date.slice(5).replace("-",".")} (${DOW[new Date(date+"T00:00:00").getDay()]})`;
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -304,12 +307,11 @@ function renderItin(){
 }
 function renderItinOverview(){
   const rows = DAYS.map((date,i)=>{
-    const dow = DOW[new Date(date+"T00:00:00").getDay()];
     const warnBadge = (TRIP_INFO[date] && TRIP_INFO[date].warning) ? `<span class="cnum">⚠️</span>` : "";
     return `
       <div class="card" data-i="${i}" style="cursor:pointer">
         <div class="chead">
-          <b>${date.slice(5).replace("-",".")} (${dow})</b>
+          <b>${fmtDay(date)}</b>
           ${warnBadge}
         </div>
         <div class="memoline">${esc(daySummary(date))}</div>
@@ -326,7 +328,6 @@ function renderItinOverview(){
 function renderItinDetail(){
   const date = DAYS[dayIdx];
   const t = TRIP_INFO[date] || {info:[]};
-  const dow = DOW[new Date(date+"T00:00:00").getDay()];
   const infoHtml = t.info.map(x=>`
     <div class="infocard">
       <span class="ic">${x.icon}</span>
@@ -341,7 +342,7 @@ function renderItinDetail(){
     </div>
     <div class="dayNav">
       <button class="iconbtn" id="dayPrev" ${dayIdx===0?"disabled":""}>‹</button>
-      <span class="dayTtl">${date.slice(5).replace("-",".")} (${dow})</span>
+      <span class="dayTtl">${fmtDay(date)}</span>
       <button class="iconbtn" id="dayNext" ${dayIdx===DAYS.length-1?"disabled":""}>›</button>
     </div>
     ${infoHtml || `<div class="empty"><span class="bigem">📅</span><p>이 날은 확정된 일정이 없어요</p></div>`}
@@ -384,7 +385,7 @@ function renderPlaces(){
   const cardsHtml = list.length ? list.map(p=>`
     <div class="card" data-id="${p.id}">
       <div class="chead">
-        <span class="ic">${CAT_MAP[p.category]?CAT_MAP[p.category].ic:"📌"}</span>
+        <span class="ic">${CAT_MAP[p.category]?.ic || "📌"}</span>
         <b>${esc(p.name)}</b>
         <span class="cnum">${esc(p.city)}</span>
       </div>
@@ -485,6 +486,40 @@ function renderCheck(){
       <button id="ckAddBtn">추가</button>
     </div>
     ${rows || `<div class="empty"><span class="bigem">🎒</span><p>준비물이 없어요</p></div>`}
+  `;
+  $$("#checkBody .checkrow").forEach(row=>{
+    const id = row.dataset.id;
+    row.querySelector(".checkbox").onclick = ()=> toggleCheck(id);
+    row.querySelector(".delx").onclick = ()=> delCheckItem(id);
+  });
+  const addFn = ()=>{
+    const v = $("#ckNew").value.trim();
+    if(!v) return;
+    addCheckItem(v);
+    $("#ckNew").value = "";
+  };
+  $("#ckAddBtn").onclick = addFn;
+  $("#ckNew").onkeydown = e=>{ if(e.key==="Enter") addFn(); };
+}
+function toggleCheck(id){
+  const it = DB.checklist.find(x=>x.id===id);
+  if(!it) return;
+  it.checked = !it.checked; save(); renderCheck();
+}
+function addCheckItem(label){
+  DB.checklist.push({id:uid("ck"), label, checked:false}); save(); renderCheck();
+}
+function delCheckItem(id){
+  DB.checklist = DB.checklist.filter(x=>x.id!==id); save(); renderCheck();
+}
+
+function renderSettings(){
+  $("#setBody").innerHTML = `
+    <div class="setblk">
+      <h4>최신 정보 새로고침</h4>
+      <p>화면이 오래돼 보이면 눌러보세요. 캐시를 건너뛰고 최신 버전을 새로 받아옵니다.</p>
+      <button class="btn full" id="refreshBtn">↻ 최신 버전 받기</button>
+    </div>
     <div class="setblk">
       <h4>화면 테마</h4>
       <button class="btn full" id="themeBtn">◐ 테마 전환</button>
@@ -502,20 +537,17 @@ function renderCheck(){
       <h4>홈 화면에 추가</h4>
       <p>폰 브라우저에서 이 주소를 열고 <b>공유 → 홈 화면에 추가</b>하면 앱처럼 쓸 수 있어요.</p>
     </div>
+    <div class="setblk">
+      <h4>버전</h4>
+      <p>v${APP_VERSION} (${APP_BUILT})</p>
+    </div>
   `;
-  $$("#checkBody .checkrow").forEach(row=>{
-    const id = row.dataset.id;
-    row.querySelector(".checkbox").onclick = ()=> toggleCheck(id);
-    row.querySelector(".delx").onclick = ()=> delCheckItem(id);
-  });
-  const addFn = ()=>{
-    const v = $("#ckNew").value.trim();
-    if(!v) return;
-    addCheckItem(v);
-    $("#ckNew").value = "";
+  $("#refreshBtn").onclick = ()=>{
+    if("serviceWorker" in navigator){
+      navigator.serviceWorker.getRegistrations().then(rs=> rs.forEach(r=>r.update()));
+    }
+    location.replace(location.pathname + "?v=" + Date.now());
   };
-  $("#ckAddBtn").onclick = addFn;
-  $("#ckNew").onkeydown = e=>{ if(e.key==="Enter") addFn(); };
   $("#themeBtn").onclick = ()=> applyTheme(document.documentElement.dataset.theme==="light"?"dark":"light");
   $("#expBtn").onclick = ()=>{
     const blob = new Blob([backupJSON()], {type:"application/json"});
@@ -543,25 +575,13 @@ function renderCheck(){
     fr.readAsText(file);
   };
 }
-function toggleCheck(id){
-  const it = DB.checklist.find(x=>x.id===id);
-  if(!it) return;
-  it.checked = !it.checked; save(); renderCheck();
-}
-function addCheckItem(label){
-  DB.checklist.push({id:uid("ck"), label, checked:false}); save(); renderCheck();
-}
-function delCheckItem(id){
-  DB.checklist = DB.checklist.filter(x=>x.id!==id); save(); renderCheck();
-}
 
+const VIEWS = { itin: renderItin, places: renderPlaces, check: renderCheck, set: renderSettings };
 function go(v){
   $$(".view").forEach(el=> el.classList.add("hidden"));
   $("#v-"+v).classList.remove("hidden");
   $$(".tab").forEach(t=> t.classList.toggle("on", t.dataset.v===v));
-  if(v==="itin") renderItin();
-  if(v==="places") renderPlaces();
-  if(v==="check") renderCheck();
+  VIEWS[v]();
 }
 $$(".tab").forEach(t=> t.onclick = ()=>{ go(t.dataset.v); window.scrollTo({top:0,behavior:"smooth"}); });
 
