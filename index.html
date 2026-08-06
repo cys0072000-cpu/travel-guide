@@ -130,6 +130,18 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 .checkrow .label.done{color:var(--tx3);text-decoration:line-through}
 .checkrow .delx{flex:none;color:var(--tx3);font-size:17px;padding:2px 4px}
 
+.voucherRow{display:flex;gap:10px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.voucherRow::-webkit-scrollbar{display:none}
+.vtile{position:relative;flex:none;width:84px}
+.vtile .thumb{width:84px;height:84px;border-radius:12px;overflow:hidden;background:var(--card2);
+  border:1px solid var(--line);display:grid;place-items:center;font-size:28px}
+.vtile .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vtile .vname{font-size:10.5px;color:var(--tx2);margin-top:4px;text-align:center;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vtile .vdel{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+  background:var(--card);border:1px solid var(--line2);color:var(--tx3);font-size:12px;font-weight:800;
+  display:grid;place-items:center}
+
 .addtip{display:flex;gap:7px;margin-bottom:14px}
 .addtip input{flex:1;background:var(--card2);border:1px solid var(--line);border-radius:10px;
   padding:10px 12px;font-size:13.5px;outline:none;min-width:0}
@@ -197,7 +209,7 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.7";
 const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
 /* 구글맵 "브리즈번" 저장 리스트에서 가져온 장소들. 최초 1회만 시딩되고,
@@ -268,6 +280,7 @@ function migrate(db){
   db.version = 1;
   db.dayMemos = db.dayMemos || {};
   db.dayPlaces = db.dayPlaces || {};
+  db.dayVouchers = db.dayVouchers || {};
   db.places = Array.isArray(db.places) ? db.places : [];
   db.checklist = Array.isArray(db.checklist) ? db.checklist
     : DEFAULT_CHECKLIST.map(label=>({id:uid("ck"), label, checked:false}));
@@ -419,6 +432,13 @@ function renderItinDetail(){
       <span class="label">${esc(p.name)}</span>
       <button class="delx">×</button>
     </div>`).join("") : `<div class="empty" style="padding:20px 0"><p>아직 담은 장소가 없어요</p></div>`;
+  const vouchers = vouchersForDay(date);
+  const voucherListHtml = vouchers.length ? `<div class="voucherRow">${vouchers.map(v=>`
+    <div class="vtile" data-id="${v.id}">
+      <div class="thumb" data-open="${v.id}">${v.type==="image" ? `<img src="${v.dataUrl}" alt="">` : "📄"}</div>
+      <div class="vname">${esc(v.name)}</div>
+      <button class="vdel" data-del="${v.id}">×</button>
+    </div>`).join("")}</div>` : `<div class="empty" style="padding:20px 0"><p>아직 첨부한 바우처가 없어요</p></div>`;
   $("#itinBody").innerHTML = `
     <div class="addhead">
       <button class="iconbtn" id="backToOverview" title="전체 일정으로">‹</button>
@@ -431,6 +451,12 @@ function renderItinDetail(){
     </div>
     ${infoHtml || `<div class="empty"><span class="bigem">📅</span><p>이 날은 확정된 일정이 없어요</p></div>`}
     ${warnHtml}
+    <div class="addhead" style="margin-top:18px">
+      <span class="ttl">📎 바우처</span>
+      <button class="iconbtn" id="addVoucherBtn" title="바우처 첨부" style="margin-left:auto">➕</button>
+    </div>
+    <input type="file" id="voucherFile" accept="image/*,application/pdf" multiple class="hidden">
+    <div id="voucherList">${voucherListHtml}</div>
     ${transitHtml}
     <div class="addhead" style="margin-top:18px">
       <span class="ttl">오늘 할 일</span>
@@ -448,6 +474,14 @@ function renderItinDetail(){
   $$("#dayPlaceList .checkrow").forEach(row=>
     row.querySelector(".delx").onclick = ()=> toggleDayPlace(date, row.dataset.id)
   );
+  $("#addVoucherBtn").onclick = ()=> $("#voucherFile").click();
+  $("#voucherFile").onchange = ev=>{
+    const files = ev.target.files;
+    if(files && files.length) addVoucherFiles(date, files);
+    ev.target.value = "";
+  };
+  $$("#voucherList [data-open]").forEach(el=> el.onclick = ()=> openVoucherView(date, el.dataset.open));
+  $$("#voucherList [data-del]").forEach(el=> el.onclick = e=>{ e.stopPropagation(); delVoucher(date, el.dataset.del); });
 }
 function placesForDay(date){
   return ((DB.dayPlaces && DB.dayPlaces[date]) || []).map(id=> DB.places.find(p=>p.id===id)).filter(Boolean);
@@ -482,6 +516,74 @@ function openDayPlacePicker(date){
     openDayPlacePicker(date);
   });
 }
+
+/* 날짜별 바우처(호텔/투어/렌터카 확인서 등 이미지·PDF). 이미지는 캔버스로
+   리사이즈·압축해서 localStorage 용량을 아끼고, PDF는 원본 그대로 저장한다. */
+function vouchersForDay(date){ return (DB.dayVouchers && DB.dayVouchers[date]) || []; }
+function pushVoucher(date, v){
+  DB.dayVouchers[date] = DB.dayVouchers[date] || [];
+  DB.dayVouchers[date].push(v);
+  save();
+  if(itinView==="detail" && DAYS[dayIdx]===date) renderItinDetail();
+}
+function delVoucher(date, id){
+  DB.dayVouchers[date] = (DB.dayVouchers[date]||[]).filter(v=>v.id!==id);
+  save();
+  renderItinDetail();
+}
+function compressImage(file, cb){
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const maxDim = 1600;
+      let {width, height} = img;
+      if(width > maxDim || height > maxDim){
+        if(width > height){ height = Math.round(height * maxDim / width); width = maxDim; }
+        else{ width = Math.round(width * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      cb(canvas.toDataURL("image/jpeg", 0.72));
+    };
+    img.onerror = ()=> toast("이미지를 읽을 수 없어요");
+    img.src = fr.result;
+  };
+  fr.onerror = ()=> toast("파일을 읽을 수 없어요");
+  fr.readAsDataURL(file);
+}
+function addVoucherFiles(date, files){
+  [...files].forEach(file=>{
+    if(file.type === "application/pdf"){
+      const fr = new FileReader();
+      fr.onload = ()=> pushVoucher(date, {id:uid("vc"), name:file.name, type:"pdf", dataUrl:fr.result, addedAt:Date.now()});
+      fr.onerror = ()=> toast("파일을 읽을 수 없어요");
+      fr.readAsDataURL(file);
+    } else {
+      compressImage(file, dataUrl=> pushVoucher(date, {id:uid("vc"), name:file.name, type:"image", dataUrl, addedAt:Date.now()}));
+    }
+  });
+}
+function openVoucherView(date, id){
+  const v = vouchersForDay(date).find(x=>x.id===id);
+  if(!v) return;
+  const body = v.type === "image"
+    ? `<img src="${v.dataUrl}" style="width:100%;border-radius:var(--r)" alt="">`
+    : `<iframe src="${v.dataUrl}" style="width:100%;height:72vh;border:0;border-radius:var(--r)"></iframe>
+       <a class="btn full" style="margin-top:10px" href="${v.dataUrl}" download="${esc(v.name)}">⬇︎ 다운로드</a>`;
+  $("#sheetHost").innerHTML = `
+    <div class="sheet">
+      <div class="sheetbar">
+        <button class="iconbtn" id="sheetClose">✕</button>
+        <span class="ttl">${esc(v.name)}</span>
+      </div>
+      <div class="sheetbody">${body}</div>
+    </div>
+  `;
+  $("#sheetClose").onclick = closeSheet;
+}
+
 const CATEGORIES = [
   {k:"food",  n:"맛집/카페", ic:"🍜"},
   {k:"sight", n:"관광지",   ic:"🏖"},
