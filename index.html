@@ -190,9 +190,32 @@ textarea.inp{resize:vertical;line-height:1.6;font-size:14px}
 <script>
 "use strict";
 const KEY = "travelguide.v1", THEME_KEY = "travelguide.theme";
-const APP_VERSION = "1.2";
+const APP_VERSION = "1.3";
 const APP_BUILT = "2026-08-07";
 const DEFAULT_CHECKLIST = ["여권","항공권/전자티켓 캡처","호주 유심/이심","해외결제 카드","돼지코 어댑터(호주 표준)","보조배터리","상비약","선크림","우산/우비","수영복"];
+/* 구글맵 "브리즈번" 저장 리스트에서 가져온 장소들. 최초 1회만 시딩되고,
+   이후 사용자가 지우면 다시 안 살아난다(db.seededPlaces 플래그로 제어). */
+const SEED_PLACES = [
+  {name:"Julius Pizzeria", city:"브리즈번", category:"food", address:"", memo:"⭐4.6(3,951) · 피자 · $20~40"},
+  {name:"Red Hot Cod", city:"브리즈번", category:"food", address:"", memo:"⭐4.4(686) · 음식점 · $20~40"},
+  {name:"서퍼스 파라다이스", city:"골드코스트", category:"sight", address:"", memo:"골드코스트 대표 해변가"},
+  {name:"Felons Brewing Co", city:"브리즈번", category:"food", address:"", memo:"⭐4.0(4,860) · 양조장"},
+  {name:"T2 Tea - Queens Plaza", city:"브리즈번", category:"shop", address:"", memo:"⭐4.5(300) · 차 가게"},
+  {name:"Lune Croissanterie Brisbane CBD", city:"브리즈번", category:"food", address:"", memo:"⭐4.3(591) · 제과점 · $1~20"},
+  {name:"GOMA 미술관", city:"브리즈번", category:"sight", address:"", memo:"⭐4.6(9,666) · 미술관"},
+  {name:"Queensland Art Gallery", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(719) · 미술관"},
+  {name:"Brisbane Sign", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(1,597) · 관광 명소, 포토스팟"},
+  {name:"워너 Bros. 무비 월드", city:"골드코스트", category:"sight", address:"", memo:"⭐4.0(32,955) · 테마파크"},
+  {name:"드림월드", city:"골드코스트", category:"sight", address:"", memo:"⭐4.4(23,246) · 테마파크"},
+  {name:"퀸즐랜드 주립 도서관", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(1,172) · 도서관"},
+  {name:"시티 보태닉 가든스", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(13,279) · 식물원"},
+  {name:"O Bagel Brisbane", city:"브리즈번", category:"food", address:"", memo:"⭐4.4(759) · 카페 · $1~20"},
+  {name:"로네 파인 코알라 상투아리", city:"브리즈번", category:"sight", address:"", memo:"⭐4.6(13,229) · 동물원 (코알라 안기 체험)"},
+  {name:"Mount Coot-Tha Summit Lookout", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(15,044) · 명승지, 야경 명소"},
+  {name:"Eat Street Northshore", city:"브리즈번", category:"food", address:"", memo:"⭐4.6(15,506) · 야시장"},
+  {name:"더 웨스트 엔드 마켓츠", city:"브리즈번", category:"food", address:"", memo:"⭐4.6(3,596) · 농산물 직판장"},
+  {name:"스트리츠 비치", city:"브리즈번", category:"sight", address:"", memo:"⭐4.7(1,391) · 인공 해변(사우스뱅크), 저장 시점 임시휴업 표시 — 가기 전 운영 확인"},
+];
 
 function todayISO(){ return new Date().toISOString().slice(0,10); }
 function backupJSON(){ return JSON.stringify(DB, null, 2); }
@@ -240,6 +263,14 @@ function migrate(db){
   db.places = Array.isArray(db.places) ? db.places : [];
   db.checklist = Array.isArray(db.checklist) ? db.checklist
     : DEFAULT_CHECKLIST.map(label=>({id:uid("ck"), label, checked:false}));
+  if(!db.seededPlaces){
+    const have = new Set(db.places.map(p=> p.name+"|"+(p.address||"")));
+    SEED_PLACES.forEach(p=>{
+      const key = p.name+"|"+(p.address||"");
+      if(!have.has(key)){ db.places.push({id:uid("pl"), createdAt:Date.now(), ...p}); have.add(key); }
+    });
+    db.seededPlaces = true;
+  }
   return db;
 }
 function save(){
