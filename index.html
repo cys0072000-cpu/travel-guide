@@ -352,6 +352,67 @@ function renderPlaces(){
   $("#addPlaceBtn").onclick = ()=> openPlaceSheet(null);
   $$("#placesBody .card").forEach(el=> el.querySelector(".editBtn").onclick = ()=> openPlaceSheet(el.dataset.id));
 }
+
+function openPlaceSheet(id){
+  const editing = DB.places.find(p=>p.id===id) || null;
+  $("#sheetHost").innerHTML = `
+    <div class="sheet">
+      <div class="sheetbar">
+        <button class="iconbtn" id="sheetClose">✕</button>
+        <span class="ttl">${editing?"장소 수정":"장소 추가"}</span>
+      </div>
+      <div class="sheetbody">
+        <label class="fl">이름</label>
+        <input class="inp" id="pfName" value="${editing?esc(editing.name):""}" placeholder="예: Kim's Kitchen">
+        <label class="fl">도시</label>
+        <select class="inp" id="pfCity">
+          ${CITIES.map(c=>`<option value="${c}" ${editing&&editing.city===c?"selected":""}>${c}</option>`).join("")}
+        </select>
+        <label class="fl">카테고리</label>
+        <select class="inp" id="pfCat">
+          ${CATEGORIES.map(c=>`<option value="${c.k}" ${editing&&editing.category===c.k?"selected":""}>${c.ic} ${c.n}</option>`).join("")}
+        </select>
+        <label class="fl">주소 (선택, 구글맵 검색 정확도용)</label>
+        <input class="inp" id="pfAddr" value="${editing?esc(editing.address||""):""}" placeholder="예: Surfers Paradise Blvd">
+        <label class="fl">메모</label>
+        <textarea class="inp" id="pfMemo" rows="3" placeholder="추천 메뉴, 팁 등">${editing?esc(editing.memo||""):""}</textarea>
+        <div class="btnrow" style="margin-top:16px">
+          <button class="btn primary full" id="pfSave">저장</button>
+        </div>
+        ${editing?'<button class="btn danger full" id="pfDel" style="margin-top:8px">삭제</button>':""}
+      </div>
+    </div>
+  `;
+  $("#sheetClose").onclick = closeSheet;
+  $("#pfSave").onclick = ()=>{
+    const name = $("#pfName").value.trim();
+    if(!name){ toast("이름을 입력해주세요"); return; }
+    const data = {
+      name,
+      city: $("#pfCity").value,
+      category: $("#pfCat").value,
+      address: $("#pfAddr").value.trim(),
+      memo: $("#pfMemo").value.trim(),
+    };
+    if(editing){
+      Object.assign(editing, data);
+    } else {
+      DB.places.push({ id: uid("pl"), createdAt: Date.now(), ...data });
+    }
+    save(); closeSheet(); renderPlaces();
+    toast(editing?"수정했어요":"저장했어요");
+  };
+  if(editing){
+    $("#pfDel").onclick = ()=>{
+      if(!confirm("이 장소를 삭제할까요?")) return;
+      DB.places = DB.places.filter(p=>p.id!==editing.id);
+      save(); closeSheet(); renderPlaces();
+      toast("삭제했어요");
+    };
+  }
+}
+function closeSheet(){ $("#sheetHost").innerHTML = ""; }
+
 function renderCheck(){
   $("#checkBody").innerHTML = '<div class="empty"><span class="bigem">🎒</span><p>체크리스트 준비 중</p></div>';
 }
